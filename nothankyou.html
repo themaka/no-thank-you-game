@@ -184,7 +184,7 @@
         </div>
         <div>Practice gratitude!</div>
         <div id="blockboard">You've thanked <span id="blocks-left">0</span> times.</div>
-        <div id="highboard">Personal best: <span id="blocks-high">0</span> thanks</div>
+        <div id="highboard">Longest streak: <span id="blocks-high">0</span> thanks</div>
 
         <div id="game-area">
             <!-- New Game Overlay -->
@@ -199,7 +199,7 @@
 
             <div id="paddle-left" class="paddle"></div>
             <div id="paddle-right" class="paddle"></div>
-            <div id="ball">Thank you!</div>
+            <div id="ball">(Thx)</div>
             <div id="msg-left" class="paddle-msg">No, thank <em>you</em>!</div>
             <div id="msg-right" class="paddle-msg">No, thank <em>you</em>!</div>
         </div>
@@ -222,6 +222,37 @@
             const startButton = document.getElementById('start-button'); // New
             const toastEl = document.getElementById('toast'); // New: toast element
 
+            // Rotating gratitude phrases (always italicize "you")
+            const gratitudePhrases = [
+                "No, thank <em>you</em>!",
+                "Thank <em>you</em>, my friend.",
+                "I appreciate <em>you</em>.",
+                "Much obliged to <em>you</em>.",
+                "Cheers to <em>you</em>!",
+                "Grateful for <em>you</em>.",
+                "Right back at <em>you</em>!",
+                "The thanks go to <em>you</em>.",
+                "Couldn’t have done it without <em>you</em>.",
+                "Big thanks to <em>you</em>!",
+                "Many thanks to <em>you</em>.",
+                "All credit to <em>you</em>.",
+                "Hats off to <em>you</em>!",
+                "Kudos to <em>you</em>!",
+                "My thanks to <em>you</em>.",
+                "I’m grateful to <em>you</em>.",
+                "That’s very kind of <em>you</em>.",
+                "This one’s for <em>you</em>!",
+                "Sending thanks to <em>you</em>.",
+                "Everything’s better with <em>you</em>."
+            ];
+            function getRandomPhrase() {
+                if (!Array.isArray(gratitudePhrases) || gratitudePhrases.length === 0) {
+                    return "No, thank <em>you</em>!";
+                }
+                const i = Math.floor(Math.random() * gratitudePhrases.length);
+                return gratitudePhrases[i];
+            }
+
             // Game Constants
             let gameAreaWidth; // Will be set on window load
             let gameAreaHeight; // Will be set on window load
@@ -234,11 +265,12 @@
             // AI Settings
             const aiEnabled = true; // Right paddle controlled by AI
             const aiBaseSpeed = 4;   // Base pixels per frame at starting ball speed (slower)
-            const aiScale = 0.55;    // AI moves at 85% of the scaled ball speed
+            const aiScale = 0.5;    // AI moves at 50% of the scaled ball speed
             const aiIncEvery = 5;    // Increase AI speed every N player blocks
-            const aiIncFactor = 1.10; // Each AI increment is +10%
+            const aiIncFactor = 1.15; // Each AI increment is +10%
             let aiGrowthMultiplier = 1; // accumulates additional AI-only growth
             let aiMoveSpeed = aiBaseSpeed * aiScale; // Current AI move speed (scales with ball + growth)
+            let aiEnglishDirection = 1; // toggles to vary english application on leveled AI
 
             // Game State
             let scores = { left: 0, right: 0 };
@@ -369,6 +401,8 @@
                 const paddleY = (side === 'left') ? paddleLeftY : paddleRightY;
 
                 // Make it measurable, then calculate wrapped size and safe position
+                // Update with a random phrase (uses innerHTML to render <em>)
+                msgEl.innerHTML = getRandomPhrase();
                 msgEl.style.display = 'block';
                 msgEl.style.visibility = 'hidden';
 
@@ -427,6 +461,11 @@
                     if (gameRunning && ballState.dx > 0) {
                         const ballCenterY = ballState.y + ball.offsetHeight / 2;
                         targetY = ballCenterY - paddleHeight / 2;
+                        // After AI has leveled up at least once, add a bit of "english"
+                        if (aiGrowthMultiplier > 1) {
+                            const bias = aiEnglishDirection * (paddleHeight * 0.22);
+                            targetY += bias;
+                        }
                     } else {
                         targetY = gameAreaHeight / 2 - paddleHeight / 2;
                     }
@@ -511,11 +550,11 @@
                         milestoneMsgs.push('AI gets sharper! +10%');
                     }
 
-                    // Prefer milestone toast; otherwise show new personal best toast
+                    // Prefer milestone toast; otherwise show new longest-streak toast
                     if (milestoneMsgs.length) {
                         showToast(milestoneMsgs.join('  •  '), 1250);
                     } else if (isNewPersonalBest) {
-                        showToast(`New personal best: ${blocksHigh}!`, 1100);
+                        showToast(`New longest streak: ${blocksHigh}!`, 1100);
                     }
 
                     showPaddleMessage('left');
@@ -533,16 +572,31 @@
                     let hitPos = (ballState.y + ballH / 2) - (paddleRightY + paddleHeight / 2);
                     ballState.dy = (hitPos / (paddleHeight / 2)) * (ballSpeed * 0.8);
 
+                    // Vary english direction for future aims
+                    aiEnglishDirection *= -1;
+
                     showPaddleMessage('right');
                 }
 
                 // Collision: Scoring (Left/Right walls)
                 if (ballState.x < 0) {
                     scores.right++;
-                    resetBall('left'); // Serve to left player
+                    // Reset speeds when the AI scores
+                    ballSpeed = ballStartSpeed;
+                    aiGrowthMultiplier = 1;
+                    aiMoveSpeed = aiBaseSpeed * (ballSpeed / ballStartSpeed) * aiScale * aiGrowthMultiplier;
+
+                    // AI scored: end current streak
+                    blocksLeft = 0;
+                    blocksLeftEl.textContent = blocksLeft;
+
+                    resetBall('left'); // Serve to left player at baseline speed
                 }
                 if (ballState.x + ballW > gameAreaWidth) {
                     scores.left++;
+                    // Player scored: start new rally at 1 by default
+                    blocksLeft = 1;
+                    blocksLeftEl.textContent = blocksLeft;
                     resetBall('right'); // Serve to right player
                 }
             }
