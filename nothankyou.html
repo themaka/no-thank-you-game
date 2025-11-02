@@ -142,6 +142,32 @@
                 /* ensure above paddles */
             }
 
+            /* Toast notification inside game area */
+            #toast {
+                position: absolute;
+                left: 50%;
+                bottom: 24px;
+                transform: translateX(-50%) translateY(10px);
+                background: rgba(0, 0, 0, 0.7);
+                color: #ecf0f1;
+                padding: 10px 16px;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: 16px;
+                letter-spacing: 0.2px;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 180ms ease, transform 180ms ease;
+                box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+                z-index: 12;
+                /* above overlay content once hidden */
+            }
+
+            #toast.visible {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+
             p {
                 margin-top: 1.5rem;
                 font-size: 1.1rem;
@@ -152,20 +178,24 @@
 
     <body>
 
-        <h1>Thank You Pong</h1>
+        <h1>No, Thank <em>You!</em></h1>
         <div id="scoreboard">
             <span id="score-left">0</span> - <span id="score-right">0</span>
         </div>
-        <div id="blockboard">You've thanked <span id="blocks-left">0</span> times</div>
+        <div>Practice gratitude!</div>
+        <div id="blockboard">You've thanked <span id="blocks-left">0</span> times.</div>
         <div id="highboard">Personal best: <span id="blocks-high">0</span> thanks</div>
 
         <div id="game-area">
             <!-- New Game Overlay -->
             <div id="game-overlay">
-                <h2>THANK YOU PONG</h2>
+                <h2>No, thank <em>you!</em> </h2>
                 <button id="start-button">Start Game</button>
             </div>
             <!-- End of New Game Overlay -->
+
+            <!-- Toast for brief messages -->
+            <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
             <div id="paddle-left" class="paddle"></div>
             <div id="paddle-right" class="paddle"></div>
@@ -190,6 +220,7 @@
             const msgRight = document.getElementById('msg-right');
             const gameOverlay = document.getElementById('game-overlay'); // New
             const startButton = document.getElementById('start-button'); // New
+            const toastEl = document.getElementById('toast'); // New: toast element
 
             // Game Constants
             let gameAreaWidth; // Will be set on window load
@@ -202,8 +233,12 @@
             let ballSpeed = ballStartSpeed; // current speed that scales up over time
             // AI Settings
             const aiEnabled = true; // Right paddle controlled by AI
-            const aiBaseSpeed = 6;  // Base pixels per frame at starting ball speed
-            let aiMoveSpeed = aiBaseSpeed; // Current AI move speed (scales with ball speed)
+            const aiBaseSpeed = 4;   // Base pixels per frame at starting ball speed (slower)
+            const aiScale = 0.55;    // AI moves at 85% of the scaled ball speed
+            const aiIncEvery = 5;    // Increase AI speed every N player blocks
+            const aiIncFactor = 1.10; // Each AI increment is +10%
+            let aiGrowthMultiplier = 1; // accumulates additional AI-only growth
+            let aiMoveSpeed = aiBaseSpeed * aiScale; // Current AI move speed (scales with ball + growth)
 
             // Game State
             let scores = { left: 0, right: 0 };
@@ -278,14 +313,50 @@
                 scores = { left: 0, right: 0 };
                 scoreLeftEl.textContent = '0';
                 scoreRightEl.textContent = '0';
-                blocksLeft = 0;
-                blocksLeftEl.textContent = '0';
+                // Player says the first "thank you" at game start
+                blocksLeft = 1;
+                blocksLeftEl.textContent = '1';
+                // Update personal best if applicable
+                if (blocksLeft > blocksHigh) {
+                    blocksHigh = blocksLeft;
+                    blocksHighEl.textContent = blocksHigh;
+                    saveHighScore(blocksHigh);
+                }
                 gameOverlay.style.display = 'none';
                 gameRunning = true;
                 // Reset speed to starting value at the beginning of a new game
                 ballSpeed = ballStartSpeed;
-                aiMoveSpeed = aiBaseSpeed; // reset AI speed with new game
-                resetBall('right'); // Serve to the right
+                aiGrowthMultiplier = 1; // reset accumulated AI growth
+                aiMoveSpeed = aiBaseSpeed * aiScale; // reset AI speed with new game
+
+                // Start the ball from the player's (left) paddle, as if they said it first
+                const ballW = ball.offsetWidth || 100;
+                const ballH = ball.offsetHeight || 30;
+                // Left paddle front is at x = 10 + paddleWidth
+                ballState.x = 10 + paddleWidth + 8; // small gap from paddle
+                ballState.y = (paddleLeftY + paddleHeight / 2) - (ballH / 2);
+                // Serve away from the left paddle (to the right)
+                const randomAngle = (Math.random() * 2 - 1) * (ballSpeed * 0.4);
+                ballState.dx = ballSpeed;
+                ballState.dy = randomAngle;
+
+                // Show a slightly longer toast to mark the opening exchange
+                showToast('First thank you!', 1600);
+            }
+
+            /**
+             * Shows a temporary toast message near the bottom of the game area.
+             * @param {string} text - Message to display
+             * @param {number} duration - How long to show, in ms (default 1200)
+             */
+            function showToast(text, duration = 1200) {
+                if (!toastEl) return;
+                toastEl.textContent = text;
+                toastEl.classList.add('visible');
+                clearTimeout(showToast._t);
+                showToast._t = setTimeout(() => {
+                    toastEl.classList.remove('visible');
+                }, Math.max(250, duration | 0));
             }
 
             /**
@@ -408,20 +479,43 @@
                     // Increment player block counter
                     blocksLeft++;
                     blocksLeftEl.textContent = blocksLeft;
+
+                    // Determine if this is a new personal best before mutating high
+                    const isNewPersonalBest = blocksLeft > blocksHigh;
+
                     // Check/update personal best
-                    if (blocksLeft > blocksHigh) {
+                    if (isNewPersonalBest) {
                         blocksHigh = blocksLeft;
                         blocksHighEl.textContent = blocksHigh;
                         saveHighScore(blocksHigh);
                     }
+
+                    // Milestones and difficulty scaling
+                    let milestoneMsgs = [];
                     // Every 10 blocks, increase ball speed by 10%
                     if (blocksLeft > 0 && blocksLeft % 10 === 0) {
                         ballSpeed = ballSpeed * 1.10;
                         // Keep the sign of dx but update magnitude to new speed so change is immediate
                         const dirX = Math.sign(ballState.dx) || 1;
                         ballState.dx = dirX * ballSpeed;
-                        // Scale AI speed proportionally to ball speed increase
-                        aiMoveSpeed = aiBaseSpeed * (ballSpeed / ballStartSpeed);
+                        // Scale AI speed proportionally to ball speed increase (preserve AI growth multiplier)
+                        aiMoveSpeed = aiBaseSpeed * (ballSpeed / ballStartSpeed) * aiScale * aiGrowthMultiplier;
+
+                        milestoneMsgs.push('Speed up! +10%');
+                    }
+                    // Every aiIncEvery blocks, add an extra AI-only growth (independent of ball speed bumps)
+                    if (blocksLeft > 0 && blocksLeft % aiIncEvery === 0) {
+                        aiGrowthMultiplier *= aiIncFactor;
+                        aiMoveSpeed = aiBaseSpeed * (ballSpeed / ballStartSpeed) * aiScale * aiGrowthMultiplier;
+
+                        milestoneMsgs.push('AI gets sharper! +10%');
+                    }
+
+                    // Prefer milestone toast; otherwise show new personal best toast
+                    if (milestoneMsgs.length) {
+                        showToast(milestoneMsgs.join('  •  '), 1250);
+                    } else if (isNewPersonalBest) {
+                        showToast(`New personal best: ${blocksHigh}!`, 1100);
                     }
 
                     showPaddleMessage('left');
