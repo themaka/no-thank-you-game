@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Thank You Pong</title>
+        <style>
+            body {
+                background-color: #2c3e50;
+                color: #ecf0f1;
+                font-family: 'Arial', sans-serif;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                text-align: center;
+            }
+
+            h1 {
+                color: #1abc9c;
+            }
+
+            #scoreboard {
+                font-size: 3rem;
+                margin-bottom: 1rem;
+                color: #fff;
+            }
+
+            #blockboard {
+                font-size: 1.25rem;
+                margin-bottom: 1rem;
+                color: #ecf0f1;
+            }
+
+            #highboard {
+                font-size: 1rem;
+                margin-bottom: 1.25rem;
+                color: #bdc3c7;
+            }
+
+            #game-area {
+                width: 800px;
+                height: 600px;
+                background-color: #34495e;
+                border: 4px solid #ecf0f1;
+                border-radius: 8px;
+                position: relative;
+                overflow: hidden;
+                box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            }
+
+            /* New styles for the game overlay */
+            #game-overlay {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(44, 62, 80, 0.9);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                z-index: 10;
+            }
+
+            #game-overlay h2 {
+                font-size: 3rem;
+                color: #1abc9c;
+                margin-bottom: 1.5rem;
+                text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            }
+
+            #start-button {
+                font-size: 1.5rem;
+                padding: 1rem 2rem;
+                background-color: #1abc9c;
+                color: #ecf0f1;
+                border: 2px solid #ecf0f1;
+                border-radius: 8px;
+                cursor: pointer;
+                font-weight: bold;
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            }
+
+            #start-button:hover {
+                background-color: #16a085;
+                transform: translateY(-3px);
+                box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+            }
+
+            /* End of new styles */
+
+            .paddle {
+                width: 15px;
+                height: 100px;
+                background-color: #1abc9c;
+                position: absolute;
+                border-radius: 4px;
+                transition: background-color 0.1s ease;
+            }
+
+            #paddle-left {
+                left: 10px;
+            }
+
+            #paddle-right {
+                right: 10px;
+            }
+
+            #ball {
+                position: absolute;
+                color: #f1c40f;
+                font-size: 24px;
+                font-weight: bold;
+                user-select: none;
+                white-space: nowrap;
+            }
+
+            .paddle-msg {
+                position: absolute;
+                display: none;
+                color: #f1c40f;
+                font-size: 18px;
+                font-weight: bold;
+                /* Allow wrapping so long text doesn't clip at the edges */
+                white-space: normal;
+                overflow-wrap: anywhere;
+                /* modern */
+                word-break: break-word;
+                /* fallback */
+                max-width: 140px;
+                text-align: center;
+                line-height: 1.15;
+                user-select: none;
+                text-shadow: 0 0 5px #000;
+                z-index: 5;
+                /* ensure above paddles */
+            }
+
+            p {
+                margin-top: 1.5rem;
+                font-size: 1.1rem;
+                color: #bdc3c7;
+            }
+        </style>
+    </head>
+
+    <body>
+
+        <h1>Thank You Pong</h1>
+        <div id="scoreboard">
+            <span id="score-left">0</span> - <span id="score-right">0</span>
+        </div>
+        <div id="blockboard">You've thanked <span id="blocks-left">0</span> times</div>
+        <div id="highboard">Personal best: <span id="blocks-high">0</span> thanks</div>
+
+        <div id="game-area">
+            <!-- New Game Overlay -->
+            <div id="game-overlay">
+                <h2>THANK YOU PONG</h2>
+                <button id="start-button">Start Game</button>
+            </div>
+            <!-- End of New Game Overlay -->
+
+            <div id="paddle-left" class="paddle"></div>
+            <div id="paddle-right" class="paddle"></div>
+            <div id="ball">Thank you!</div>
+            <div id="msg-left" class="paddle-msg">No, thank <em>you</em>!</div>
+            <div id="msg-right" class="paddle-msg">No, thank <em>you</em>!</div>
+        </div>
+
+        <p>Controls: W/S for Left Paddle | Right Paddle: AI</p>
+
+        <script>
+            // Get DOM Elements
+            const gameArea = document.getElementById('game-area');
+            const paddleLeft = document.getElementById('paddle-left');
+            const paddleRight = document.getElementById('paddle-right');
+            const ball = document.getElementById('ball');
+            const scoreLeftEl = document.getElementById('score-left');
+            const scoreRightEl = document.getElementById('score-right');
+            const blocksLeftEl = document.getElementById('blocks-left');
+            const blocksHighEl = document.getElementById('blocks-high');
+            const msgLeft = document.getElementById('msg-left');
+            const msgRight = document.getElementById('msg-right');
+            const gameOverlay = document.getElementById('game-overlay'); // New
+            const startButton = document.getElementById('start-button'); // New
+
+            // Game Constants
+            let gameAreaWidth; // Will be set on window load
+            let gameAreaHeight; // Will be set on window load
+            let paddleHeight; // Will be set on window load
+            let paddleWidth; // Will be set on window load
+            const paddleSpeed = 8;
+            // Ball speed configuration
+            const ballStartSpeed = 4; // slightly slower starting speed
+            let ballSpeed = ballStartSpeed; // current speed that scales up over time
+            // AI Settings
+            const aiEnabled = true; // Right paddle controlled by AI
+            const aiBaseSpeed = 6;  // Base pixels per frame at starting ball speed
+            let aiMoveSpeed = aiBaseSpeed; // Current AI move speed (scales with ball speed)
+
+            // Game State
+            let scores = { left: 0, right: 0 };
+            let blocksLeft = 0; // count of player (left paddle) blocks
+            let blocksHigh = 0; // persisted personal best
+
+            // High score helpers
+            const HS_KEY = 'nty_blocks_high';
+            function loadHighScore() {
+                try {
+                    const raw = localStorage.getItem(HS_KEY);
+                    const v = parseInt(raw, 10);
+                    blocksHigh = Number.isFinite(v) && v > 0 ? v : 0;
+                } catch (e) {
+                    blocksHigh = 0;
+                }
+                blocksHighEl.textContent = blocksHigh;
+            }
+            function saveHighScore(v) {
+                try {
+                    localStorage.setItem(HS_KEY, String(v));
+                } catch (e) {
+                    // ignore storage errors (private mode or disabled)
+                }
+            }
+            let ballState = {
+                x: 0, // Initial position will be set on load
+                y: 0, // Initial position will be set on load
+                dx: ballStartSpeed,
+                dy: ballStartSpeed / 2
+            };
+            let paddleLeftY; // Will be set on load
+            let paddleRightY; // Will be set on load
+            let keys = {};
+            let gameRunning = false; // New: Game state flag
+
+            // Event Listeners for controls
+            document.addEventListener('keydown', (e) => {
+                keys[e.key] = true;
+            });
+            document.addEventListener('keyup', (e) => {
+                keys[e.key] = false;
+            });
+
+            /**
+             * Resets the ball to the center and serves to the winner.
+             * @param {string} winner - 'left' or 'right'
+             */
+            function resetBall(winner) {
+                // Center the ball
+                ballState.x = gameAreaWidth / 2 - ball.offsetWidth / 2;
+                ballState.y = gameAreaHeight / 2 - ball.offsetHeight / 2;
+
+                // Randomize vertical angle
+                let randomAngle = (Math.random() * 2 - 1) * (ballSpeed * 0.6); // -0.6 to +0.6 of current speed
+                ballState.dy = randomAngle;
+
+                // Serve to the winner
+                ballState.dx = (winner === 'left' ? ballSpeed : -ballSpeed);
+            }
+
+            /**
+             * Starts or restarts the game.
+             */
+            function startGame() {
+                // Re-check dimensions in case of window resize, though full resize logic isn't implemented
+                gameAreaWidth = gameArea.clientWidth;
+                gameAreaHeight = gameArea.clientHeight;
+                paddleHeight = paddleLeft.offsetHeight;
+                paddleWidth = paddleLeft.offsetWidth;
+
+                scores = { left: 0, right: 0 };
+                scoreLeftEl.textContent = '0';
+                scoreRightEl.textContent = '0';
+                blocksLeft = 0;
+                blocksLeftEl.textContent = '0';
+                gameOverlay.style.display = 'none';
+                gameRunning = true;
+                // Reset speed to starting value at the beginning of a new game
+                ballSpeed = ballStartSpeed;
+                aiMoveSpeed = aiBaseSpeed; // reset AI speed with new game
+                resetBall('right'); // Serve to the right
+            }
+
+            /**
+             * Shows the "No! Thank you!" message over the paddle briefly.
+             * @param {string} side - 'left' or 'right'
+             */
+            function showPaddleMessage(side) {
+                const msgEl = (side === 'left') ? msgLeft : msgRight;
+                const paddleEl = (side === 'left') ? paddleLeft : paddleRight;
+                const paddleY = (side === 'left') ? paddleLeftY : paddleRightY;
+
+                // Make it measurable, then calculate wrapped size and safe position
+                msgEl.style.display = 'block';
+                msgEl.style.visibility = 'hidden';
+
+                const msgWidth = msgEl.offsetWidth; // width after wrapping up to max-width
+                const msgHeight = msgEl.offsetHeight;
+
+                // Base x positions relative to paddles (with 10px margin)
+                const leftMargin = 10;
+                const rightMargin = 10;
+                let xBaseLeft = leftMargin + paddleWidth + 10; // to the right of left paddle
+                let xBaseRight = gameAreaWidth - rightMargin - paddleWidth - 10; // left edge of space next to right paddle
+
+                let x;
+                if (side === 'left') {
+                    x = xBaseLeft; // left message starts right of left paddle
+                } else {
+                    x = xBaseRight - msgWidth; // right message ends just left of right paddle
+                }
+
+                // Clamp within game area bounds
+                x = Math.max(0, Math.min(x, gameAreaWidth - msgWidth));
+
+                // Vertically center on the paddle and clamp to area
+                let y = paddleY + paddleHeight / 2 - msgHeight / 2;
+                y = Math.max(0, Math.min(y, gameAreaHeight - msgHeight));
+
+                msgEl.style.left = x + 'px';
+                msgEl.style.top = y + 'px';
+                msgEl.style.visibility = 'visible';
+
+                // Flash paddle color while message is shown
+                paddleEl.style.backgroundColor = '#f1c40f';
+
+                // Hide after a short delay
+                setTimeout(() => {
+                    msgEl.style.display = 'none';
+                    paddleEl.style.backgroundColor = '#1abc9c';
+                }, 600);
+            }
+
+            /**
+             * Updates paddle positions based on key presses.
+             */
+            function updatePaddles() {
+                // Move paddles
+                if (keys['w'] && paddleLeftY > 0) {
+                    paddleLeftY -= paddleSpeed;
+                }
+                if (keys['s'] && paddleLeftY < gameAreaHeight - paddleHeight) {
+                    paddleLeftY += paddleSpeed;
+                }
+                if (aiEnabled) {
+                    // Simple AI: follow the ball when it's moving toward the right paddle,
+                    // otherwise drift back to center.
+                    let targetY;
+                    if (gameRunning && ballState.dx > 0) {
+                        const ballCenterY = ballState.y + ball.offsetHeight / 2;
+                        targetY = ballCenterY - paddleHeight / 2;
+                    } else {
+                        targetY = gameAreaHeight / 2 - paddleHeight / 2;
+                    }
+                    // Clamp target
+                    targetY = Math.max(0, Math.min(targetY, gameAreaHeight - paddleHeight));
+                    const delta = targetY - paddleRightY;
+                    if (Math.abs(delta) > 0.5) {
+                        const step = Math.min(aiMoveSpeed, Math.abs(delta));
+                        paddleRightY += Math.sign(delta) * step;
+                    }
+                } else {
+                    // Manual right paddle controls (fallback)
+                    if (keys['ArrowUp'] && paddleRightY > 0) {
+                        paddleRightY -= paddleSpeed;
+                    }
+                    if (keys['ArrowDown'] && paddleRightY < gameAreaHeight - paddleHeight) {
+                        paddleRightY += paddleSpeed;
+                    }
+                }
+            }
+
+            /**
+             * Main update function, called every frame.
+             */
+            function update() {
+                // Move ball
+                ballState.x += ballState.dx;
+                ballState.y += ballState.dy;
+
+                const ballW = ball.offsetWidth;
+                const ballH = ball.offsetHeight;
+
+                // Collision: Top/Bottom walls
+                if (ballState.y <= 0 || ballState.y + ballH >= gameAreaHeight) {
+                    ballState.dy *= -1;
+                }
+
+                // Collision: Paddles
+                // Check left paddle
+                if (ballState.dx < 0 && // Moving left
+                    ballState.x <= 10 + paddleWidth && // At or past the paddle's front
+                    ballState.x > 10 && // Not fully past the paddle
+                    ballState.y + ballH > paddleLeftY && // Ball bottom is below paddle top
+                    ballState.y < paddleLeftY + paddleHeight) { // Ball top is above paddle bottom
+
+                    ballState.dx *= -1; // Reverse horizontal direction
+                    // Adjust vertical angle based on where it hit the paddle
+                    let hitPos = (ballState.y + ballH / 2) - (paddleLeftY + paddleHeight / 2);
+                    ballState.dy = (hitPos / (paddleHeight / 2)) * (ballSpeed * 0.8);
+                    // Increment player block counter
+                    blocksLeft++;
+                    blocksLeftEl.textContent = blocksLeft;
+                    // Check/update personal best
+                    if (blocksLeft > blocksHigh) {
+                        blocksHigh = blocksLeft;
+                        blocksHighEl.textContent = blocksHigh;
+                        saveHighScore(blocksHigh);
+                    }
+                    // Every 10 blocks, increase ball speed by 10%
+                    if (blocksLeft > 0 && blocksLeft % 10 === 0) {
+                        ballSpeed = ballSpeed * 1.10;
+                        // Keep the sign of dx but update magnitude to new speed so change is immediate
+                        const dirX = Math.sign(ballState.dx) || 1;
+                        ballState.dx = dirX * ballSpeed;
+                        // Scale AI speed proportionally to ball speed increase
+                        aiMoveSpeed = aiBaseSpeed * (ballSpeed / ballStartSpeed);
+                    }
+
+                    showPaddleMessage('left');
+                }
+
+                // Check right paddle
+                if (ballState.dx > 0 && // Moving right
+                    ballState.x + ballW >= gameAreaWidth - 10 - paddleWidth && // At or past the paddle's front
+                    ballState.x + ballW < gameAreaWidth - 10 && // Not fully past
+                    ballState.y + ballH > paddleRightY && // Ball bottom is below paddle top
+                    ballState.y < paddleRightY + paddleHeight) { // Ball top is above paddle bottom
+
+                    ballState.dx *= -1; // Reverse horizontal direction
+                    // Adjust vertical angle
+                    let hitPos = (ballState.y + ballH / 2) - (paddleRightY + paddleHeight / 2);
+                    ballState.dy = (hitPos / (paddleHeight / 2)) * (ballSpeed * 0.8);
+
+                    showPaddleMessage('right');
+                }
+
+                // Collision: Scoring (Left/Right walls)
+                if (ballState.x < 0) {
+                    scores.right++;
+                    resetBall('left'); // Serve to left player
+                }
+                if (ballState.x + ballW > gameAreaWidth) {
+                    scores.left++;
+                    resetBall('right'); // Serve to right player
+                }
+            }
+
+            /**
+             * Renders the game state to the DOM.
+             */
+            function draw() {
+                paddleLeft.style.top = paddleLeftY + 'px';
+                paddleRight.style.top = paddleRightY + 'px';
+                ball.style.left = ballState.x + 'px';
+                ball.style.top = ballState.y + 'px';
+
+                scoreLeftEl.textContent = scores.left;
+                scoreRightEl.textContent = scores.right;
+            }
+
+            /**
+             * The main game loop.
+             */
+            function gameLoop() {
+                updatePaddles(); // Always update paddle positions
+
+                if (gameRunning) {
+                    update(); // Only update game logic if running
+                }
+
+                draw();   // Render changes
+                requestAnimationFrame(gameLoop); // Request next frame
+            }
+
+            // Event listener for start button
+            startButton.addEventListener('click', startGame);
+
+            // --- NEW: Wait for window to load to get correct dimensions ---
+            window.onload = function () {
+                // Initialize dimensions
+                gameAreaWidth = gameArea.clientWidth;
+                gameAreaHeight = gameArea.clientHeight;
+                paddleHeight = paddleLeft.offsetHeight;
+                paddleWidth = paddleLeft.offsetWidth;
+
+                // Set initial paddle positions
+                paddleLeftY = gameAreaHeight / 2 - paddleHeight / 2;
+                paddleRightY = gameAreaHeight / 2 - paddleHeight / 2;
+
+                // Center ball visually before game starts
+                ballState.x = gameAreaWidth / 2 - ball.offsetWidth / 2;
+                ballState.y = gameAreaHeight / 2 - ball.offsetHeight / 2;
+
+                // Handle cases where offsetWidth might still be 0 on load (e.g. font not loaded)
+                if (isNaN(ballState.x) || ballState.x === 0) {
+                    ballState.x = gameArea.clientWidth / 2 - 50; // Educated guess
+                }
+                if (isNaN(ballState.y) || ballState.y === 0) {
+                    ballState.y = gameArea.clientHeight / 2 - 15; // Educated guess
+                }
+
+                draw(); // Draw initial positions
+                gameLoop(); // Start the loop
+                loadHighScore(); // Load and show personal best
+            }
+        </script>
+
+    </body>
+
+</html>
